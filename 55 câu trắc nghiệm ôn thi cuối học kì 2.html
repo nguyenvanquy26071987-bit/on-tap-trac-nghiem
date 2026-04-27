@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trò Chơi Trắc Nghiệm - Vòng Quay May Mắn</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f8ff;
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        h1, h2, h3 {
+            color: #0056b3;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 18px;
+            margin: 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background-color: #007bff;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        
+        /* Màn hình Wheel */
+        #wheel-timer { font-size: 40px; font-weight: bold; color: #dc3545; margin: 20px 0; }
+        #selected-student { font-size: 35px; font-weight: bold; color: #28a745; margin: 20px 0; min-height: 50px; }
+        
+        /* Màn hình Câu hỏi */
+        #question-timer { font-size: 30px; font-weight: bold; color: #dc3545; }
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .option-btn {
+            font-size: 18px;
+            padding: 15px;
+            background-color: #e9ecef;
+            color: #333;
+            border: 2px solid #ced4da;
+            text-align: left;
+            line-height: 1.5;
+        }
+        .option-btn:hover:not(:disabled) { background-color: #d3d9df; }
+        .correct { background-color: #28a745 !important; color: white !important; border-color: #28a745 !important; }
+        .wrong { background-color: #dc3545 !important; color: white !important; border-color: #dc3545 !important; }
+        
+        #explanation {
+            margin-top: 25px;
+            padding: 20px;
+            background-color: #d4edda;
+            border-left: 5px solid #28a745;
+            text-align: left;
+            display: none;
+            font-size: 18px;
+        }
+
+        /* Màn hình Quà */
+        .gifts-container {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 30px;
+        }
+        .gift-box {
+            width: 100px;
+            height: 100px;
+            background-color: #ffc107;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+        .gift-box:hover { transform: scale(1.1); }
+        .gift-box.opened { background-color: #17a2b8; font-size: 16px; font-weight: bold; color: white; cursor: default; transform: none; padding: 10px; text-align: center;}
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="screen-wheel">
+        <h1>🎡 Vòng Quay Gọi Tên 🎡</h1>
+        <div id="wheel-timer">15</div>
+        <div id="selected-student">...</div>
+        <button id="btn-spin" onclick="startWheel()">Quay Chọn Học Sinh</button>
+        <button id="btn-start-q" class="hidden" onclick="showQuestionScreen()">Bắt Đầu Trả Lời</button>
+    </div>
+
+    <div id="screen-question" class="hidden">
+        <h2>Học sinh: <span id="current-student-name" style="color:#007bff;"></span></h2>
+        <div id="question-timer">60</div>
+        <div id="question-text" style="font-size: 20px; text-align: left; margin: 20px 0;"></div>
+        
+        <div class="options-grid" id="options-container"></div>
+
+        <div id="explanation">
+            <strong>Hướng dẫn giải:</strong><br>
+            <span id="explanation-text"></span>
+        </div>
+        
+        <br>
+        <button id="btn-to-gifts" class="hidden" onclick="showGiftScreen()">🎁 Nhận Quà 🎁</button>
+    </div>
+
+    <div id="screen-gifts" class="hidden">
+        <h2>Phần Thưởng Chúc Mừng!</h2>
+        <p>Em hãy chọn 1 túi quà bí mật nhé:</p>
+        <div class="gifts-container" id="gifts-container"></div>
+        <br><br>
+        <button id="btn-next-question" class="hidden" onclick="nextQuestion()">Câu Hỏi Tiếp Theo ➔</button>
+    </div>
+</div>
+
+<script>
+    // Danh sách 25 học sinh
+    const students = [
+        "Long", "Trần Đức", "Phú Đức", "Lành", "Trà My", "Bảo", "Ngọc Anh", "Pháp", 
+        "Triết", "Huế", "Hưng", "Khánh", "Ngọc", "Bảo Thi", "Trâm", "Thanh Trường", 
+        "Đài", "Huyền", "Nam", "Ly", "Ý", "Quang Trường", "Vân", "Kiều", "Anh Quân"
+    ];
+
+    const giftPool = ["1 tràng vỗ tay", "1 điểm tốt", "2 điểm tốt", "1 tràng vỗ tay", "Điểm 8"];
+
+    const questions = [
+        {
+            text: "Câu 1. Trong không gian với hệ trục tọa độ \\(Oxyz\\), mặt cầu \\((S): (x+2)^2+(y-1)^2+z^2=4\\) có tâm và bán kính R lần lượt là:",
+            options: ["A. \\(I(2;-1;0)\\), R=2.", "B. \\(I(2;-1;0)\\), R=4.", "C. \\(I(-2;1;0)\\), R=4.", "D. \\(I(-2;1;0)\\), R=2."],
+            correctIndex: 3,
+            explanation: "Phương trình mặt cầu có dạng \\((x-a)^2+(y-b)^2+(z-c)^2=R^2\\). Nhìn vào phương trình ta suy ra tâm \\(I(-2; 1; 0)\\) và bán kính \\(R = \\sqrt{4} = 2\\)."
+        },
+        {
+            text: "Câu 2. Diện tích S của hình phẳng giới hạn bởi đồ thị hàm số \\(y=x^2\\), trục hoành Ox, các đường thẳng \\(x=1\\), \\(x=2\\) là:",
+            options: ["A. S=8.", "B. \\(S=\\frac{8}{3}\\).", "C. S=7.", "D. \\(S=\\frac{7}{3}\\)."],
+            correctIndex: 3,
+            explanation: "Diện tích \\(S = \\int_{1}^{2} x^2 dx = \\frac{x^3}{3} \\Big|_1^2 = \\frac{8}{3} - \\frac{1}{3} = \\frac{7}{3}\\)."
+        },
+        {
+            text: "Câu 3. Tích phân \\(I=\\int_{-1}^{1}(x^3+3x+2)dx\\) có giá trị là:",
+            options: ["A. I=4.", "B. I=2.", "C. I=3.", "D. I=1."],
+            correctIndex: 0,
+            explanation: "\\(I = \\int_{-1}^{1}(x^3+3x)dx + \\int_{-1}^{1}2dx = 0 + 2x \\Big|_{-1}^1 = 4\\)."
+        },
+        {
+            text: "Câu 4. Cho \\(\\int 5^x dx=F(x)+C\\). Khẳng định nào dưới đây đúng?",
+            options: ["A. \\(F(x) = 5 \\ln 5\\).", "B. \\(F'(x)=-5^x\\).", "C. \\(F(x)=5^x\\).", "D. \\(F'(x)=5^x\\)."],
+            correctIndex: 3,
+            explanation: "Theo định nghĩa của nguyên hàm: Nếu \\(\\int f(x)dx = F(x) + C\\) thì \\(F'(x) = f(x)\\). Ở đây \\(f(x) = 5^x\\) nên \\(F'(x) = 5^x\\)."
+        },
+        {
+            text: "Câu 5. Trong không gian với hệ tọa độ Oxyz, cho mặt phẳng \\((P):3x+2y-z+1=0\\). Mặt phẳng (P) có vectơ pháp tuyến là:",
+            options: ["A. \\(\\vec{n}=(3;-1;2)\\).", "B. \\(\\vec{n}=(-1;3;2)\\).", "C. \\(\\vec{n}=(3;2;-1)\\).", "D. \\(\\vec{n}=(2;3;-1)\\)."],
+            correctIndex: 2,
+            explanation: "Vectơ pháp tuyến của mặt phẳng \\(Ax+By+Cz+D=0\\) là \\(\\vec{n}=(A; B; C)\\). Dễ dàng thấy \\(\\vec{n}=(3; 2; -1)\\)."
+        },
+        {
+            text: "Câu 6. Họ nguyên hàm của hàm số \\(f(x)=3x^2+2x+5\\) là:",
+            options: ["A. \\(x^3+x^2+5x+C\\).", "B. \\(x^3+x+C\\).", "C. \\(x^3+x^2+C\\).", "D. \\(x^3+x^2+5\\)."],
+            correctIndex: 0,
+            explanation: "\\(\\int(3x^2+2x+5)dx = x^3+x^2+5x+C\\)."
+        },
+        {
+            text: "Câu 7. Trong không gian Oxyz, cho đường thẳng \\(d:\\begin{cases}x=0\\\\ y=t\\\\ z=2-t\\end{cases}\\). Vectơ nào dưới đây là vectơ chỉ phương của d?",
+            options: ["A. \\(\\vec{u}=(1;0;-1)\\).", "B. \\(\\vec{u}=(0;1;-1)\\).", "C. \\(\\vec{u}=(0;0;2)\\).", "D. \\(\\vec{u}=(0;1;-2)\\)."],
+            correctIndex: 1,
+            explanation: "Dựa vào hệ số của t trong phương trình tham số, vectơ chỉ phương là \\(\\vec{u}=(0; 1; -1)\\)."
+        },
+        {
+            text: "Câu 8. Nếu \\(\\int_{1}^{3}f(x)dx=2\\) thì giá trị của \\(\\int_{1}^{3}5f(x)dx\\) bằng: (Giả định đề gốc lỗi hiển thị)",
+            options: ["A. 18.", "B. 10.", "C. 12.", "D. 20."],
+            correctIndex: 1,
+            explanation: "Áp dụng tính chất: \\(\\int k \\cdot f(x)dx = k \\int f(x)dx = 5 \\times 2 = 10\\)."
+        },
+        {
+            text: "Câu 9. Trong không gian Oxyz, cho 2 đường thẳng \\(d_1:\\frac{x}{1}=\\frac{y+1}{-1}=\\frac{z-1}{2}\\) và \\(d_2:\\frac{x+1}{-1}=\\frac{y}{1}=\\frac{z-3}{1}\\). Góc giữa hai đường thẳng đó bằng:",
+            options: ["A. \\(90^{\\circ}\\).", "B. \\(45^{\\circ}\\).", "C. \\(30^{\\circ}\\).", "D. \\(60^{\\circ}\\)."],
+            correctIndex: 0,
+            explanation: "\\(\\vec{u_1}=(1;-1;2)\\), \\(\\vec{u_2}=(-1;1;1)\\). Ta có \\(\\vec{u_1} \\cdot \\vec{u_2} = -1 - 1 + 2 = 0\\). Suy ra góc là \\(90^{\\circ}\\)."
+        },
+        {
+            text: "Câu 10. Đường thẳng d đi qua \\(M(2;0;-1)\\) và có véc tơ chỉ phương \\(\\vec{a}=(2;-3;1)\\) có phương trình:",
+            options: ["A. \\(\\begin{cases}x=4+2t\\\\ y=-3t\\\\ z=2+t\\end{cases}\\)", "B. \\(\\begin{cases}x=-2+2t\\\\ y=-3t\\\\ z=t\\end{cases}\\)", "C. \\(\\begin{cases}x=2+2t\\\\ y=-3t\\\\ z=-1+t\\end{cases}\\)", "D. \\(\\begin{cases}x=-2+4t\\\\ y=-6t\\\\ z=1+2t\\end{cases}\\)"],
+            correctIndex: 2,
+            explanation: "Phương trình tham số qua M(x0;y0;z0) có vtcp (a;b;c) là \\(x=x_0+at, y=y_0+bt, z=z_0+ct\\)."
+        },
+        {
+            text: "Câu 11. Viết phương trình mặt phẳng đi qua ba điểm \\(A(1;1;4)\\), \\(B(2;7;9)\\), \\(C(0;9;13)\\).",
+            options: ["A. \\(2x+y+z+1=0\\)", "B. \\(x-y+z-4=0\\)", "C. \\(2x+y-z-2=0\\)", "D. \\(7x-2y+z-9=0\\)"],
+            correctIndex: 1,
+            explanation: "\\(\\vec{AB}=(1;6;5)\\), \\(\\vec{AC}=(-1;8;9)\\). \\(\\vec{n}=[\\vec{AB},\\vec{AC}]=(14;-14;14)\\). Chọn \\(\\vec{n}=(1;-1;1)\\). Phương trình: \\(1(x-1)-1(y-1)+1(z-4)=0 \\Leftrightarrow x-y+z-4=0\\)."
+        },
+        {
+            text: "Câu 12. Phương trình nào sau đây là phương trình tổng quát của một mặt phẳng?",
+            options: ["A. \\(\\frac{1}{x}+\\frac{2}{y}+\\frac{3}{z}=1\\)", "B. \\(\\frac{x}{2}=\\frac{y-1}{4}=z\\)", "C. \\(x^2+y^2+z^2-1=0\\)", "D. \\(2x-3z+1=0\\)"],
+            correctIndex: 3,
+            explanation: "Phương trình tổng quát mặt phẳng có dạng bậc nhất \\(Ax+By+Cz+D=0\\)."
+        },
+        {
+            text: "Câu 13. Tích phân \\(\\int_{0}^{3}e^x dx\\) có giá trị bằng:",
+            options: ["A. \\(1-e^3\\).", "B. \\(e^3-1\\).", "C. \\(e^3+1\\).", "D. \\(\\frac{477}{25}\\)."],
+            correctIndex: 1,
+            explanation: "\\(\\int_{0}^{3}e^x dx = e^x \\Big|_0^3 = e^3 - e^0 = e^3 - 1\\)."
+        },
+        {
+            text: "Câu 14. Họ các nguyên hàm của hàm số \\(f(x)=\\cos x-\\sin x\\) là:",
+            options: ["A. \\(\\cos x-\\sin x+C\\)", "B. \\(\\sin x+\\cos x+C\\).", "C. \\(\\sin x-\\cos x+C\\).", "D. \\(\\sin 2x+C\\)."],
+            correctIndex: 1,
+            explanation: "\\(\\int(\\cos x - \\sin x)dx = \\sin x - (-\\cos x) + C = \\sin x + \\cos x + C\\)."
+        },
+        {
+            text: "Câu 15. Nguyên hàm \\(F(x)\\) của hàm số \\(f(x)=3x^2+4x\\) thỏa mãn \\(F(1)=5\\) là:",
+            options: ["A. \\(F(x)=9x^3+8x^2-12\\)", "B. \\(F(x)=x^3+2x^2+5\\).", "C. \\(F(x)=6x+4\\)", "D. \\(F(x)=x^3+2x^2+2\\)."],
+            correctIndex: 3,
+            explanation: "\\(F(x) = \\int(3x^2+4x)dx = x^3+2x^2+C\\). Thay \\(x=1\\): \\(1+2+C=5 \\Rightarrow C=2\\). Vậy \\(F(x)=x^3+2x^2+2\\)."
+        },
+        {
+            text: "Câu 16. Cho mặt cầu \\((S):(x-1)^2+(y-2)^2+(z-3)^2=16\\). Bán kính của mặt cầu bằng:",
+            options: ["A. 16.", "B. 2.", "C. 4.", "D. 8."],
+            correctIndex: 2,
+            explanation: "\\(R^2 = 16 \\Rightarrow R = 4\\)."
+        },
+        {
+            text: "Câu 17. Tọa độ một vectơ chỉ phương của đường thẳng \\(d:\\frac{x-2}{-3}=\\frac{y+1}{1}=\\frac{z}{2}\\) là:",
+            options: ["A. (2;-1;0).", "B. (-3;1;2).", "C. (-2;1;0).", "D. (3;1;-2)."],
+            correctIndex: 1,
+            explanation: "Vectơ chỉ phương nằm ở dưới mẫu của phương trình chính tắc: \\(\\vec{u}=(-3; 1; 2)\\)."
+        },
+        {
+            text: "Câu 18. Thể tích khối tròn xoay sinh ra khi quay hình phẳng giới hạn bởi \\(y=5x-6x^2, y=0, x=0, x=1\\) quanh trục Ox là:",
+            options: ["A. \\(\\frac{1}{2}\\)", "B. \\(\\frac{8}{15}\\)", "C. \\(\\frac{\\pi}{2}\\)", "D. \\(\\frac{8\\pi}{15}\\)"],
+            correctIndex: 3,
+            explanation: "\\(V = \\pi \\int_{0}^{1}(5x-6x^2)^2 dx = \\pi \\int_{0}^{1}(25x^2 - 60x^3 + 36x^4) dx = \\pi (\\frac{25}{3} - 15 + \\frac{36}{5}) = \\frac{8\\pi}{15}\\)."
+        },
+        {
+            text: "Câu 19. Mặt cầu tâm \\(M(1;2;4)\\) tiếp xúc mặt phẳng \\(2x+y-2z+1=0\\) có bán kính bằng:",
+            options: ["A. \\(\\frac{4}{3}\\)", "B. 1.", "C. \\(\\frac{3}{4}\\)", "D. 2."],
+            correctIndex: 1,
+            explanation: "Bán kính bằng khoảng cách từ M đến mặt phẳng: \\(R = d(M,(P)) = \\frac{|2(1)+2-2(4)+1|}{\\sqrt{2^2+1^2+(-2)^2}} = \\frac{|-3|}{3} = 1\\)."
+        },
+        {
+            text: "Câu 20. Đường thẳng nào sau đây vuông góc với mặt phẳng (giả sử có véc tơ pháp tuyến \\(\\vec{n}=(1;2;-3)\\)):",
+            options: ["A. \\(d:\\frac{x-2}{1}=\\frac{y-4}{2}=\\frac{z+4}{-3}\\)", "B. \\(d:\\frac{x-1}{1}=\\frac{y-2}{2}=\\frac{z+1}{3}\\)", "C. \\(d:\\frac{x-1}{1}=\\frac{y-2}{1}=\\frac{z+1}{-1}\\)", "D. \\(d:\\frac{x-1}{2}=\\frac{y-2}{3}=\\frac{z+1}{1}\\)"],
+            correctIndex: 0,
+            explanation: "Đường thẳng vuông góc với mặt phẳng thì vectơ chỉ phương của nó cùng phương với vectơ pháp tuyến của mặt phẳng."
+        },
+        {
+            text: "Câu 21. Trong không gian Oxyz, mặt phẳng nào sau đây đi qua gốc tọa độ?",
+            options: ["A. \\(2x+5y-8z=0\\)", "B. \\(y+2025=0\\)", "C. \\(x+20=0\\)", "D. \\(x-2024=0\\)"],
+            correctIndex: 0,
+            explanation: "Mặt phẳng đi qua gốc tọa độ O(0;0;0) khi thay x=0, y=0, z=0 vào phương trình ta được mệnh đề đúng (hệ số D = 0)."
+        },
+        {
+            text: "Câu 22. Cho đường thẳng \\(\\Delta\\) có phương trình \\(\\frac{x-1}{3}=\\frac{y+2}{-2}=\\frac{z-1}{4}\\). Vectơ nào sau đây là vectơ chỉ phương của \\(\\Delta\\)?",
+            options: ["A. \\(\\vec{u_2}=(1;-2;1)\\)", "B. \\(\\vec{u_1}=(-1;2;-1)\\)", "C. \\(\\vec{u_4}=(3;2;4)\\)", "D. \\(\\vec{u_3}=(3;-2;4)\\)"],
+            correctIndex: 3,
+            explanation: "Vectơ chỉ phương nằm ở dưới mẫu của phương trình chính tắc: \\(\\vec{u}=(3; -2; 4)\\)."
+        },
+        {
+            text: "Câu 23. Họ nguyên hàm \\(\\int x^5 dx\\) bằng:",
+            options: ["A. \\(\\frac{1}{6}x^6+C\\)", "B. \\(5x^5+C\\)", "C. \\(4x^3+C\\)", "D. \\(x^5+C\\)"],
+            correctIndex: 0,
+            explanation: "Áp dụng công thức cơ bản: \\(\\int x^n dx = \\frac{x^{n+1}}{n+1} + C\\)."
+        },
+        {
+            text: "Câu 24. Cosin của góc giữa hai mặt phẳng \\((P):x+2y-2z+1=0\\) và \\((Q):x+y+z-1=0\\) bằng:",
+            options: ["A. \\(-\\frac{\\sqrt{3}}{9}\\)", "B. \\(\\frac{\\sqrt{3}}{3}\\)", "C. \\(-\\frac{\\sqrt{3}}{3}\\)", "D. \\(\\frac{\\sqrt{3}}{9}\\)"],
+            correctIndex: 3,
+            explanation: "\\(\\cos\\varphi = \\frac{|\\vec{n_1}\\cdot\\vec{n_2}|}{|\\vec{n_1}|\\cdot|\\vec{n_2}|} = \\frac{|1+2-2|}{\\sqrt{1^2+2^2+(-2)^2}\\sqrt{1^2+1^2+1^2}} = \\frac{1}{3\\sqrt{3}} = \\frac{\\sqrt{3}}{9}\\)."
+        },
+        {
+            text: "Câu 25. Cho hình phẳng D giới hạn bởi \\(y=f(x)\\) liên tục, trục hoành, \\(x=a, x=b\\). Mệnh đề nào ĐÚNG (biết \\(f(x)\\) đổi dấu tại x=0 thuộc (a;b)):",
+            options: ["A. \\(S_D=-\\int_{a}^{0}f(x)dx-\\int_{a}^{b}f(x)dx\\)", "B. \\(S_D=\\int_{a}^{0}f(x)dx+\\int_{0}^{b}f(x)dx\\)", "C. \\(S_D=\\int_{a}^{0}f(x)dx-\\int_{0}^{b}f(x)dx\\)", "D. \\(S_D=-\\int_{a}^{0}f(x)dx+\\int_{0}^{b}f(x)dx\\)"],
+            correctIndex: 3,
+            explanation: "Dựa vào đồ thị đổi dấu, diện tích được chia làm các phần tương ứng với tích phân trị tuyệt đối. Nếu \\(f(x)\\le 0\\) trên (a;0) và \\(f(x)\\ge 0\\) trên (0;b) thì \\(S = -\\int_{a}^{0}f(x)dx+\\int_{0}^{b}f(x)dx\\)."
+        },
+        {
+            text: "Câu 26. Cho \\(F(x)\\) là một nguyên hàm của \\(f(x)\\). Mệnh đề nào dưới đây sai?",
+            options: ["A. \\(\\int f(x)dx=F(x)+C\\)", "B. \\(F(x)=f(x)\\)", "C. \\((\\int f(x)dx)'=f(x)\\)", "D. \\(F'(x)=f(x)\\)"],
+            correctIndex: 1,
+            explanation: "Theo định nghĩa nguyên hàm, \\(F'(x) = f(x)\\), việc khẳng định \\(F(x) = f(x)\\) là sai."
+        },
+        {
+            text: "Câu 27. Phương trình của mặt cầu tâm \\(I(1;-2;3)\\) bán kính \\(R=3\\) là:",
+            options: ["A. \\((x-1)^2+(y+2)^2+(z-3)^2=9\\)", "B. \\((x+1)^2+(y-2)^2+(z+3)^2=3\\)", "C. \\((x-1)^2+(y+2)^2+(z-3)^2=3\\)", "D. \\((x+1)^2+(y-2)^2+(z+3)^2=9\\)"],
+            correctIndex: 0,
+            explanation: "Thay vào phương trình tổng quát: \\((x-a)^2+(y-b)^2+(z-c)^2=R^2 \\Rightarrow (x-1)^2+(y+2)^2+(z-3)^2=9\\)."
+        },
+        {
+            text: "Câu 28. Cho hàm số \\(y=f(x)\\) liên tục trên \\([a;b]\\). Chọn mệnh đề sai.",
+            options: ["A. \\(\\int_{a}^{b}f(x)dx=F(b)-F(a)\\)", "B. \\(\\int_{a}^{b}f(x)dx=-\\int_{b}^{a}f(x)dx\\)", "C. \\(\\int_{a}^{a}f(x)dx=1\\)", "D. \\(\\int_{a}^{a}f(x)dx=0\\)"],
+            correctIndex: 2,
+            explanation: "Tích phân với hai cận bằng nhau luôn bằng 0. Vậy mệnh đề \\(\\int_{a}^{a}f(x)dx=1\\) là sai."
+        },
+        {
+            text: "Câu 29. Cho \\(\\int_{-2}^{2}f(x)dx=-1\\) và \\(\\int_{-2}^{2}g(x)dx=3\\). Khẳng định nào ĐÚNG?",
+            options: ["A. \\(\\int_{-2}^{2}[f(x)+g(x)]dx=2\\)", "B. \\(\\int_{-2}^{2}[f(x)-g(x)]dx=4\\)", "C. \\(\\int_{-2}^{2}f(x)g(x)dx=-3\\)", "D. \\(\\int_{-2}^{2}5f(x)dx=5\\)"],
+            correctIndex: 0,
+            explanation: "Áp dụng tính chất tuyến tính của tích phân: \\(\\int [f(x)+g(x)]dx = -1 + 3 = 2\\)."
+        },
+        {
+            text: "Câu 30. Mặt phẳng \\((P):2x-3z+1=0\\) có vectơ pháp tuyến là:",
+            options: ["A. \\(\\vec{n_4}=(-2;3;-1)\\)", "B. \\(\\vec{n_3}=(-2;0;-3)\\)", "C. \\(\\vec{n_1}=(2;0;-3)\\)", "D. \\(\\vec{n_2}=(2;-3;1)\\)"],
+            correctIndex: 2,
+            explanation: "Hệ số của x, y, z lần lượt là 2, 0, -3 nên \\(\\vec{n} = (2;0;-3)\\)."
+        },
+        {
+            text: "Câu 31. Một vật đang chuyển động với vận tốc 10 m/s thì tăng tốc với gia tốc \\(a(t)=t^2+3t\\). Tính quãng đường vật đi được trong 6 giây kể từ khi tăng tốc.",
+            options: ["A. 126m.", "B. 136m.", "C. 216m.", "D. 276m."],
+            correctIndex: 3,
+            explanation: "\\(v(t) = \\int (t^2+3t)dt = \\frac{t^3}{3} + \\frac{3t^2}{2} + 10\\). \\(S = \\int_{0}^{6} (\\frac{t^3}{3} + \\frac{3t^2}{2} + 10) dt = 276m\\)."
+        },
+        {
+            text: "Câu 32. Mặt cầu \\((S): (x+y)^2=2xy-z^2+1-4x\\) có tâm là:",
+            options: ["A. \\(I(2;0;0)\\).", "B. \\(I(4;0;0)\\).", "C. \\(I(-4;0;0)\\).", "D. \\(I(-2;0;0)\\)."],
+            correctIndex: 3,
+            explanation: "Khai triển và rút gọn ta được \\(x^2+y^2+z^2+4x-1=0 \\Leftrightarrow (x+2)^2+y^2+z^2=5\\). Tâm \\(I(-2;0;0)\\)."
+        },
+        {
+            text: "Câu 33. Mặt phẳng trung trực của đoạn thẳng AB với \\(A(4;0;1)\\) và \\(B(-2;2;3)\\) có phương trình là:",
+            options: ["A. \\(x+y+2z-6=0\\).", "B. \\(6x-2y-2z-1=0\\).", "C. \\(3x+y+z-6=0\\).", "D. \\(3x-y-z=0\\)."],
+            correctIndex: 3,
+            explanation: "Trung điểm \\(M(1;1;2)\\). Vectơ pháp tuyến \\(\\vec{n}=\\vec{AB}=(-6;2;2)\\), chọn \\(\\vec{n}=(3;-1;-1)\\). Phương trình: \\(3(x-1)-(y-1)-(z-2)=0 \\Leftrightarrow 3x-y-z=0\\)."
+        },
+        {
+            text: "Câu 34. Tìm họ nguyên hàm của hàm số \\(y=x^2-3^x+\\frac{1}{x}\\)",
+            options: ["A. \\(\\frac{x^3}{3}-\\frac{3^x}{\\ln 3}-\\frac{1}{x^2}+C\\)", "B. \\(\\frac{x^3}{3}-3^x+\\frac{1}{x^2}+C\\)", "C. \\(\\frac{x^3}{3}-\\frac{3^x}{\\ln 3}+\\ln|x|+C\\)", "D. \\(\\frac{x^3}{3}-\\frac{3^x}{\\ln 3}-\\ln|x|+C\\)"],
+            correctIndex: 2,
+            explanation: "\\(\\int(x^2-3^x+\\frac{1}{x})dx = \\frac{x^3}{3} - \\frac{3^x}{\\ln 3} + \\ln|x| + C\\)."
+        },
+        {
+            text: "Câu 35. Thể tích khối tròn xoay khi quay hình phẳng giới hạn bởi \\(y=x^2-2x\\), \\(y=0, x=0, x=1\\) quanh trục hoành là:",
+            options: ["A. \\(\\frac{8\\pi}{15}\\)", "B. \\(\\frac{16\\pi}{15}\\)", "C. \\(\\frac{4\\pi}{3}\\)", "D. \\(\\frac{2\\pi}{3}\\)"],
+            correctIndex: 0,
+            explanation: "\\(V = \\pi \\int_{0}^{1}(x^2-2x)^2 dx = \\pi \\int_{0}^{1}(x^4-4x^3+4x^2)dx = \\frac{8\\pi}{15}\\)."
+        },
+        {
+            text: "Câu 36. Phương trình của đường thẳng đi qua \\(M(1;-2;3)\\) và vuông góc với mặt phẳng \\((P):2x-y+3z+1=0\\) là:",
+            options: ["A. \\(\\begin{cases}x=-1+2t\\\\ y=2-t\\\\ z=-3+3t\\end{cases}\\)", "B. \\(\\begin{cases}x=2+t\\\\ y=-1-2t\\\\ z=3+3t\\end{cases}\\)", "C. \\(\\begin{cases}x=1+2t\\\\ y=-2-t\\\\ z=3+3t\\end{cases}\\)", "D. \\(\\begin{cases}x=1-2t\\\\ y=-2-t\\\\ z=3-3t\\end{cases}\\)"],
+            correctIndex: 2,
+            explanation: "Vectơ chỉ phương \\(\\vec{u}=\\vec{n_P}=(2;-1;3)\\). Đi qua \\(M(1;-2;3)\\)."
+        },
+        {
+            text: "Câu 37. Phương trình mặt cầu có tâm \\(I(-1;2;-3)\\), bán kính \\(R=3\\) là:",
+            options: ["A. \\((x+1)^2+(y-2)^2+(z+3)^2=3\\)", "B. \\((x+1)^2+(y-2)^2+(z+3)^2=9\\)", "C. \\((x-1)^2+(y+2)^2+(z-3)^2=3\\)", "D. \\((x-1)^2+(y+2)^2+(z-3)^2=9\\)"],
+            correctIndex: 1,
+            explanation: "\\((x-(-1))^2+(y-2)^2+(z-(-3))^2 = 3^2 \\Rightarrow (x+1)^2+(y-2)^2+(z+3)^2=9\\)."
+        },
+        {
+            text: "Câu 38. Cho 2 mặt phẳng \\((\\alpha): x+y-z+1=0\\) và \\((\\beta): -2x+my+2z-2=0\\). Tìm m để hai mặt phẳng song song.",
+            options: ["A. Không tồn tại.", "B. m=5.", "C. m=2.", "D. m=-2."],
+            correctIndex: 0,
+            explanation: "Để song song thì \\(\\frac{1}{-2} = \\frac{1}{m} = \\frac{-1}{2} \\neq \\frac{1}{-2}\\). Điều kiện \\(\\neq\\) cuối cùng vô lý nên chúng luôn cắt hoặc trùng nhau. Không tồn tại m."
+        },
+        {
+            text: "Câu 39. Góc giữa đường thẳng \\(d:\\begin{cases}x=6+5t\\\\ y=2+t\\\\ z=1\\end{cases}\\) và mặt phẳng \\((P):3x-2y+1=0\\) là:",
+            options: ["A. \\(90^{\\circ}\\)", "B. \\(45^{\\circ}\\)", "C. \\(30^{\\circ}\\)", "D. \\(60^{\\circ}\\)"],
+            correctIndex: 1,
+            explanation: "\\(\\sin\\varphi = \\frac{|\\vec{u}\\cdot\\vec{n}|}{|\\vec{u}|\\cdot|\\vec{n}|} = \\frac{|5(3)+1(-2)+0|}{\\sqrt{26}\\sqrt{13}} = \\frac{13}{13\\sqrt{2}} = \\frac{\\sqrt{2}}{2} \\Rightarrow \\varphi=45^{\\circ}\\)."
+        },
+        {
+            text: "Câu 40. Cosin góc giữa \\(d_1:\\frac{x-1}{2}=\\frac{y}{2}=\\frac{z+1}{-1}\\) và \\(d_2:\\frac{x+1}{1}=\\frac{y-2}{-2}=\\frac{z+3}{1}\\) là:",
+            options: ["A. \\(\\frac{1}{\\sqrt{2}}\\)", "B. \\(\\frac{1}{\\sqrt{6}}\\)", "C. \\(\\frac{\\sqrt{6}}{3}\\)", "D. \\(\\frac{\\sqrt{3}}{2}\\)"],
+            correctIndex: 1,
+            explanation: "\\(\\cos\\varphi = \\frac{|2(1)+2(-2)+(-1)(1)|}{\\sqrt{2^2+2^2+(-1)^2}\\sqrt{1^2+(-2)^2+1^2}} = \\frac{|-3|}{3\\sqrt{6}} = \\frac{1}{\\sqrt{6}}\\)."
+        },
+        {
+            text: "Câu 41. Vectơ nào dưới đây là một vectơ chỉ phương của \\(d:\\frac{x-2}{3}=\\frac{y+5}{4}=\\frac{z-2}{-1}\\)?",
+            options: ["A. \\(\\vec{u_2}=(3;4;-1)\\).", "B. \\(\\vec{u_3}=(3;4;1)\\).", "C. \\(\\vec{u_3}=(2;5;-2)\\).", "D. \\(\\vec{u_1}=(2;-5;2)\\)."],
+            correctIndex: 0,
+            explanation: "Nhìn vào mẫu số của phương trình chính tắc: \\(\\vec{u}=(3; 4; -1)\\)."
+        },
+        {
+            text: "Câu 42. Hai đường thẳng \\(d_1:\\begin{cases}x=-1+12t\\\\ y=2+6t\\\\ z=3+3t\\end{cases}\\) và \\(d_2:\\begin{cases}x=7+8t'\\\\ y=6+4t'\\\\ z=5+2t'\\end{cases}\\) có vị trí tương đối là:",
+            options: ["A. chéo nhau.", "B. trùng nhau.", "C. cắt nhau.", "D. song song."],
+            correctIndex: 1,
+            explanation: "\\(\\vec{u_1}=(12;6;3) \\sim \\vec{u_2}=(8;4;2) \\sim (4;2;1)\\). Lấy điểm \\(M(-1;2;3)\\) thuộc \\(d_1\\) thay vào \\(d_2\\) ta thấy thỏa mãn (với t'=-1). Do đó hai đường thẳng trùng nhau."
+        },
+        {
+            text: "Câu 43. Gọi \\(\\alpha\\) là góc giữa hai mặt phẳng \\((P):x-2y+2z-1=0\\) và \\((Q):2x+2y-z-3=0\\). Giá trị \\(\\cos\\alpha\\) bằng:",
+            options: ["A. \\(\\frac{2}{3}\\)", "B. \\(-\\frac{4}{9}\\)", "C. \\(-\\frac{2}{3}\\)", "D. \\(\\frac{4}{9}\\)"],
+            correctIndex: 3,
+            explanation: "\\(\\cos\\alpha = \\frac{|1(2)+(-2)(2)+2(-1)|}{\\sqrt{1^2+(-2)^2+2^2}\\sqrt{2^2+2^2+(-1)^2}} = \\frac{|-4|}{3 \\times 3} = \\frac{4}{9}\\)."
+        },
+        {
+            text: "Câu 44. Phương trình nào sau đây là phương trình tổng quát của mặt phẳng?",
+            options: ["A. \\(x^2+y+z+2=0\\).", "B. \\(2x+y^2+z+1=0\\).", "C. \\(2x+y+z+3=0\\).", "D. \\(2x+y+z^2+4=0\\)."],
+            correctIndex: 2,
+            explanation: "Mặt phẳng có phương trình bậc nhất đối với cả 3 biến x, y, z."
+        },
+        {
+            text: "Câu 45. Cho mặt cầu \\((S):(x+1)^2+y^2+(z-3)^2=4\\). Tọa độ tâm I và bán kính R lần lượt là:",
+            options: ["A. \\(I(-1;0;3)\\), R=2.", "B. \\(I(-1;0;3)\\), R=4.", "C. \\(I(1;0;3)\\), R=2.", "D. \\(I(1;0;3)\\), R=4."],
+            correctIndex: 0,
+            explanation: "Dựa vào dạng \\((x-a)^2+(y-b)^2+(z-c)^2=R^2\\) ta có \\(I(-1;0;3)\\) và \\(R=\\sqrt{4}=2\\)."
+        },
+        {
+            text: "Câu 46. Thể tích V của khối tròn xoay sinh ra khi cho hình phẳng giới hạn bởi \\(y=2x-x^2\\) và \\(y=0, x=0, x=2\\) quay quanh Ox là:",
+            options: ["A. \\(V=\\pi\\int_{0}^{2}(2x-x^2)dx\\).", "B. \\(V=\\pi^2\\int_{0}^{2}(2x-x^2)^2dx\\).", "C. \\(V=\\pi\\int_{0}^{2}(2x-x^2)^2dx\\).", "D. \\(V=\\int_{0}^{2}(2x-x^2)^2dx\\)."],
+            correctIndex: 2,
+            explanation: "Công thức tính thể tích khối tròn xoay quanh Ox là \\(V = \\pi \\int_{a}^{b}[f(x)]^2 dx\\)."
+        },
+        {
+            text: "Câu 47. Vectơ nào sau đây là vectơ chỉ phương của \\(\\Delta:\\frac{x-5}{8}=\\frac{y-9}{6}=\\frac{z-12}{3}\\)?",
+            options: ["A. \\(\\vec{u_2}=(8;6;-3)\\).", "B. \\(\\vec{u_4}=(5;9;12)\\).", "C. \\(\\vec{u_1}=(8;6;3)\\).", "D. \\(\\vec{u_3}=(-8;6;-3)\\)."],
+            correctIndex: 2,
+            explanation: "Mẫu số của các phân thức cung cấp tọa độ vectơ chỉ phương: \\(\\vec{u}=(8; 6; 3)\\)."
+        },
+        {
+            text: "Câu 48. Phương trình mặt phẳng qua \\(A(-1;1;-2)\\) và có vectơ pháp tuyến \\(\\vec{n}=(1;-2;-2)\\) là:",
+            options: ["A. \\(-x+y-2z+1=0\\)", "B. \\(x-2y-2z-1=0\\)", "C. \\(x-2y-2z+7=0\\).", "D. \\(-x+y-2z-1=0\\)"],
+            correctIndex: 1,
+            explanation: "Phương trình: \\(1(x+1) - 2(y-1) - 2(z+2) = 0 \\Leftrightarrow x - 2y - 2z - 1 = 0\\)."
+        },
+        {
+            text: "Câu 49. Điểm nào dưới đây thuộc đường thẳng \\(d:\\frac{x+1}{-1}=\\frac{y-2}{3}=\\frac{z-1}{3}\\)?",
+            options: ["A. A(1;2;1).", "B. N(-1;3;2).", "C. P(-1;2;1).", "D. Q(1;-2;-1)."],
+            correctIndex: 2,
+            explanation: "Thay tọa độ các điểm vào d, tại P(-1;2;1) ta được các vế đều bằng 0, nên điểm P thuộc d."
+        },
+        {
+            text: "Câu 50. Vectơ nào sau đây là vectơ pháp tuyến của mặt phẳng \\((P):x+3y-4z+5=0\\)?",
+            options: ["A. \\(\\vec{n_2}=(1;3;-4)\\).", "B. \\(\\vec{n_4}=(3;-4;5)\\).", "C. \\(\\vec{n_3}=(1;3;4)\\).", "D. \\(\\vec{n_1}=(3;4;5)\\)."],
+            correctIndex: 0,
+            explanation: "Hệ số của x, y, z trong phương trình là 1, 3, -4 nên \\(\\vec{n}=(1; 3; -4)\\)."
+        },
+        {
+            text: "Câu 51. Biết \\(F(x)\\) là nguyên hàm của \\(f(x)\\) trên [2;4] thỏa mãn \\(F(2)=6\\) và \\(F(4)=3\\). Tích phân \\(\\int_{2}^{4}f(x)dx\\) bằng:",
+            options: ["A. 2.", "B. 3.", "C. 9.", "D. -3."],
+            correctIndex: 3,
+            explanation: "\\(\\int_{2}^{4}f(x)dx = F(4) - F(2) = 3 - 6 = -3\\)."
+        },
+        {
+            text: "Câu 52. Hàm số \\(F(x)\\) là một nguyên hàm của hàm số \\(f(x)\\) trên khoảng K nếu:",
+            options: ["A. \\(F(x)=f(x)\\)", "B. \\(F'(x)=f(x)\\)", "C. \\(f'(x)=-F(x)\\)", "D. \\(f(x)=F(x)\\)"],
+            correctIndex: 1,
+            explanation: "Định nghĩa cơ bản của nguyên hàm: \\(F'(x) = f(x), \\forall x \\in K\\)."
+        },
+        {
+            text: "Câu 53. Nếu \\(\\int_{0}^{4}f(x)dx=37\\) thì \\(\\int_{0}^{4}2f(x)dx\\) bằng (Giả định đề gốc lỗi hiển thị):",
+            options: ["A. -27.", "B. 74.", "C. 12.", "D. 10."],
+            correctIndex: 1,
+            explanation: "\\(\\int 2f(x)dx = 2 \\times 37 = 74\\)."
+        },
+        {
+            text: "Câu 54. Phương trình của mặt cầu (S) có tâm \\(I(2;-1;3)\\) bán kính \\(R=4\\) là:",
+            options: ["A. \\((x-2)^2+(y+1)^2+(z-3)^2=16\\).", "B. \\((x+2)^2+(y-1)^2+(z+3)^2=16\\).", "C. \\((x+2)^2+(y-1)^2+(z+3)^2=4\\).", "D. \\((x-2)^2+(y+1)^2+(z-3)^2=4\\)."],
+            correctIndex: 0,
+            explanation: "\\((x-a)^2+(y-b)^2+(z-c)^2=R^2 \\Rightarrow (x-2)^2+(y+1)^2+(z-3)^2=16\\)."
+        },
+        {
+            text: "Câu 55. Phương trình đường thẳng đi qua điểm \\(P(1;1;-1)\\) và có véc tơ chỉ phương \\(\\vec{u}=(1;2;3)\\) là:",
+            options: ["A. \\(\\frac{x-1}{1}=\\frac{y-1}{2}=\\frac{z+1}{3}\\)", "B. \\(\\frac{x+2}{1}=\\frac{y+3}{2}=\\frac{z+2}{3}\\)", "C. \\(\\frac{x-1}{1}=\\frac{y-2}{1}=\\frac{z-3}{-1}\\)", "D. \\(\\frac{x-1}{2}=\\frac{y-1}{3}=\\frac{z+1}{2}\\)"],
+            correctIndex: 0,
+            explanation: "Phương trình chính tắc: \\(\\frac{x-x_0}{a}=\\frac{y-y_0}{b}=\\frac{z-z_0}{c} \\Rightarrow \\frac{x-1}{1}=\\frac{y-1}{2}=\\frac{z+1}{3}\\)."
+        }
+    ];
+
+    let currentQuestionIndex = 0;
+    let wheelInterval;
+    let questionInterval;
+    let currentStudent = "";
+    
+    function startWheel() {
+        document.getElementById('btn-spin').disabled = true;
+        document.getElementById('btn-start-q').classList.add('hidden');
+        let timeLeft = 15;
+        const timerDisplay = document.getElementById('wheel-timer');
+        const nameDisplay = document.getElementById('selected-student');
+        
+        wheelInterval = setInterval(() => {
+            const randomName = students[Math.floor(Math.random() * students.length)];
+            nameDisplay.innerText = randomName;
+        }, 100);
+
+        const countdown = setInterval(() => {
+            timeLeft--;
+            timerDisplay.innerText = timeLeft;
+            if (timeLeft <= 0) {
+                clearInterval(wheelInterval);
+                clearInterval(countdown);
+                currentStudent = students[Math.floor(Math.random() * students.length)];
+                nameDisplay.innerText = "🎉 " + currentStudent + " 🎉";
+                document.getElementById('btn-start-q').classList.remove('hidden');
+                document.getElementById('current-student-name').innerText = currentStudent;
+            }
+        }, 1000);
+    }
+
+    function showQuestionScreen() {
+        document.getElementById('screen-wheel').classList.add('hidden');
+        document.getElementById('screen-question').classList.remove('hidden');
+        loadQuestion();
+    }
+
+    function loadQuestion() {
+        if (currentQuestionIndex >= questions.length) {
+            alert("Đã hết câu hỏi ôn tập!");
+            return;
+        }
+
+        const q = questions[currentQuestionIndex];
+        document.getElementById('question-text').innerHTML = q.text;
+        document.getElementById('explanation-text').innerHTML = q.explanation;
+        document.getElementById('explanation').style.display = 'none';
+        document.getElementById('btn-to-gifts').classList.add('hidden');
+        
+        const optionsContainer = document.getElementById('options-container');
+        optionsContainer.innerHTML = '';
+        
+        q.options.forEach((opt, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerHTML = opt;
+            btn.onclick = () => checkAnswer(btn, index);
+            optionsContainer.appendChild(btn);
+        });
+
+        // Kích hoạt MathJax để hiển thị công thức Toán
+        MathJax.typesetPromise();
+
+        let timeLeft = 60;
+        document.getElementById('question-timer').innerText = timeLeft;
+        clearInterval(questionInterval);
+        questionInterval = setInterval(() => {
+            timeLeft--;
+            document.getElementById('question-timer').innerText = timeLeft;
+            if (timeLeft <= 0) {
+                clearInterval(questionInterval);
+                alert("Hết giờ suy nghĩ!");
+                disableAllOptions();
+            }
+        }, 1000);
+    }
+
+    function checkAnswer(btn, selectedIndex) {
+        const q = questions[currentQuestionIndex];
+        if (selectedIndex === q.correctIndex) {
+            clearInterval(questionInterval);
+            btn.classList.add('correct');
+            disableAllOptions();
+            document.getElementById('explanation').style.display = 'block';
+            document.getElementById('btn-to-gifts').classList.remove('hidden');
+            MathJax.typesetPromise(); // Hiển thị lại công thức trong phần giải thích
+        } else {
+            btn.classList.add('wrong');
+            btn.disabled = true; 
+        }
+    }
+
+    function disableAllOptions() {
+        const btns = document.querySelectorAll('.option-btn');
+        btns.forEach(b => b.disabled = true);
+    }
+
+    function showGiftScreen() {
+        document.getElementById('screen-question').classList.add('hidden');
+        document.getElementById('screen-gifts').classList.remove('hidden');
+        document.getElementById('btn-next-question').classList.add('hidden');
+        
+        const container = document.getElementById('gifts-container');
+        container.innerHTML = '';
+        
+        let shuffledGifts = [...giftPool].sort(() => 0.5 - Math.random());
+        
+        for (let i = 0; i < 5; i++) {
+            const box = document.createElement('div');
+            box.className = 'gift-box';
+            box.innerText = '🎁';
+            box.onclick = () => openGift(box, shuffledGifts[i]);
+            container.appendChild(box);
+        }
+    }
+
+    function openGift(boxElement, giftText) {
+        boxElement.classList.add('opened');
+        boxElement.innerText = giftText;
+        
+        const boxes = document.querySelectorAll('.gift-box');
+        boxes.forEach(b => b.onclick = null);
+        
+        document.getElementById('btn-next-question').classList.remove('hidden');
+    }
+
+    function nextQuestion() {
+        currentQuestionIndex++;
+        document.getElementById('screen-gifts').classList.add('hidden');
+        document.getElementById('screen-wheel').classList.remove('hidden');
+        
+        document.getElementById('btn-spin').disabled = false;
+        document.getElementById('btn-start-q').classList.add('hidden');
+        document.getElementById('selected-student').innerText = '...';
+        document.getElementById('wheel-timer').innerText = '15';
+    }
+</script>
+
+</body>
+</html>
