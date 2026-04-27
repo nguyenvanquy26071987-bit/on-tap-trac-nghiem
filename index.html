@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trò Chơi Trắc Nghiệm - Vòng Quay May Mắn</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f8ff;
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        h1, h2, h3 {
+            color: #0056b3;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 18px;
+            margin: 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background-color: #007bff;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        
+        /* Màn hình Wheel */
+        #wheel-timer { font-size: 40px; font-weight: bold; color: #dc3545; margin: 20px 0; }
+        #selected-student { font-size: 35px; font-weight: bold; color: #28a745; margin: 20px 0; min-height: 50px; }
+        
+        /* Màn hình Câu hỏi */
+        #question-timer { font-size: 30px; font-weight: bold; color: #dc3545; }
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .option-btn {
+            font-size: 18px;
+            padding: 15px;
+            background-color: #e9ecef;
+            color: #333;
+            border: 2px solid #ced4da;
+            text-align: left;
+        }
+        .option-btn:hover:not(:disabled) { background-color: #d3d9df; }
+        .correct { background-color: #28a745 !important; color: white !important; border-color: #28a745 !important; }
+        .wrong { background-color: #dc3545 !important; color: white !important; border-color: #dc3545 !important; }
+        
+        #explanation {
+            margin-top: 25px;
+            padding: 20px;
+            background-color: #d4edda;
+            border-left: 5px solid #28a745;
+            text-align: left;
+            display: none;
+            font-size: 18px;
+        }
+
+        /* Màn hình Quà */
+        .gifts-container {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 30px;
+        }
+        .gift-box {
+            width: 100px;
+            height: 100px;
+            background-color: #ffc107;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+        .gift-box:hover { transform: scale(1.1); }
+        .gift-box.opened { background-color: #17a2b8; font-size: 16px; font-weight: bold; color: white; cursor: default; transform: none; padding: 10px; text-align: center;}
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="screen-wheel">
+        <h1>🎡 Vòng Quay Gọi Tên 🎡</h1>
+        <div id="wheel-timer">15</div>
+        <div id="selected-student">...</div>
+        <button id="btn-spin" onclick="startWheel()">Quay Chọn Học Sinh</button>
+        <button id="btn-start-q" class="hidden" onclick="showQuestionScreen()">Bắt Đầu Trả Lời</button>
+    </div>
+
+    <div id="screen-question" class="hidden">
+        <h2>Học sinh: <span id="current-student-name" style="color:#007bff;"></span></h2>
+        <div id="question-timer">60</div>
+        <div id="question-text" style="font-size: 20px; text-align: left; margin: 20px 0;"></div>
+        
+        <div class="options-grid" id="options-container">
+            </div>
+
+        <div id="explanation">
+            <strong>Hướng dẫn giải:</strong><br>
+            <span id="explanation-text"></span>
+        </div>
+        
+        <br>
+        <button id="btn-to-gifts" class="hidden" onclick="showGiftScreen()">🎁 Nhận Quà 🎁</button>
+    </div>
+
+    <div id="screen-gifts" class="hidden">
+        <h2>Phần Thưởng Chúc Mừng!</h2>
+        <p>Em hãy chọn 1 túi quà bí mật nhé:</p>
+        <div class="gifts-container" id="gifts-container">
+            </div>
+        <br><br>
+        <button id="btn-next-question" class="hidden" onclick="nextQuestion()">Câu Hỏi Tiếp Theo ➔</button>
+    </div>
+</div>
+
+<script>
+    // --- DỮ LIỆU CỦA THẦY ---
+    // Mảng tên học sinh (Đang có 24 bạn, thầy thêm 1 bạn nữa cho đủ 25 nhé)
+    const students = [
+        "Long", "Trần Đức", "Phú Đức", "Lành", "Trà My", "Bảo", "Ngọc Anh", "Pháp", 
+        "Triết", "Huế", "Hưng", "Khánh", "Ngọc", "Bảo Thi", "Trâm", "Thanh Trường", 
+        "Đài", "Huyền", "Nam", "Ly", "Ý", "Quang Trường", "Vân", "Kiều"
+    ];
+
+    // Mảng quà tặng (Sẽ được xáo trộn mỗi lần)
+    const giftPool = ["1 tràng vỗ tay", "1 điểm tốt", "2 điểm tốt", "1 tràng vỗ tay", "Điểm 8"];
+
+    // Danh sách câu hỏi (Thầy thêm tiếp các câu còn lại theo mẫu này)
+    const questions = [
+        {
+            text: "Câu 1. Trong không gian với hệ trục tọa độ \\(Oxyz\\), mặt cầu \\((S): (x+2)^2+(y-1)^2+z^2=4\\) có tâm và bán kính \\(R\\) lần lượt là:",
+            options: ["A. \\(I(2;-1;0), R=2\\)", "B. \\(I(2;-1;0), R=4\\)", "C. \\(I(-2;1;0), R=4\\)", "D. \\(I(-2;1;0), R=2\\)"],
+            correctIndex: 3, // Vị trí đúng: A=0, B=1, C=2, D=3
+            explanation: "Phương trình mặt cầu có dạng \\((x-a)^2+(y-b)^2+(z-c)^2=R^2\\). Nhìn vào phương trình ta suy ra tâm \\(I(-2; 1; 0)\\) và bán kính \\(R = \\sqrt{4} = 2\\). Chọn D."
+        },
+        {
+            text: "Câu 2. Diện tích \\(S\\) của hình phẳng giới hạn bởi đồ thị hàm số \\(y=x^2\\), trục hoành \\(Ox\\), các đường thẳng \\(x=1\\), \\(x=2\\) là:",
+            options: ["A. \\(S=8\\)", "B. \\(S=\\frac{8}{3}\\)", "C. \\(S=7\\)", "D. \\(S=\\frac{7}{3}\\)"],
+            correctIndex: 3,
+            explanation: "Diện tích \\(S = \\int_{1}^{2} |x^2| dx = \\int_{1}^{2} x^2 dx = \\frac{x^3}{3} \\Big|_1^2 = \\frac{8}{3} - \\frac{1}{3} = \\frac{7}{3}\\). Chọn D."
+        },
+        {
+            text: "Câu 3. Tích phân \\(I=\\int_{-1}^{1}(x^3+3x+2)dx\\) có giá trị là:",
+            options: ["A. \\(I=4\\)", "B. \\(I=2\\)", "C. \\(I=3\\)", "D. \\(I=1\\)"],
+            correctIndex: 0,
+            explanation: "Tách \\(I = \\int_{-1}^{1}(x^3+3x)dx + \\int_{-1}^{1}2dx\\). Vì hàm \\(y=x^3+3x\\) là hàm lẻ nên tích phân trên đoạn đối xứng \\([-1;1]\\) bằng 0. Vậy \\(I = \\int_{-1}^{1}2dx = 2x \\Big|_{-1}^1 = 2 - (-2) = 4\\). Chọn A."
+        },
+        {
+            text: "Câu 4. Cho \\(\\int 5^xdx=F(x)+C\\). Khẳng định nào dưới đây đúng?",
+            options: ["A. \\(F(x) = 5 \\ln 5\\)", "B. \\(F'(x)=-5^x\\)", "C. \\(F(x)=5^x\\)", "D. \\(F'(x)=5^x+C\\) (Lưu ý: theo định nghĩa nguyên hàm thì \\(F'(x) = f(x)\\) nên đáp án chính xác là \\(F'(x)=5^x\\))"],
+            correctIndex: 3,
+            explanation: "Theo định nghĩa của nguyên hàm: Nếu \\(\\int f(x)dx = F(x) + C\\) thì \\(F'(x) = f(x)\\). Ở đây \\(f(x) = 5^x\\) nên \\(F'(x) = 5^x\\)."
+        },
+        {
+            text: "Câu 5. Trong không gian với hệ tọa độ \\(Oxyz\\), cho mặt phẳng \\((P):3x+2y-z+1=0\\). Mặt phẳng \\((P)\\) có vectơ pháp tuyến là:",
+            options: ["A. \\(\\vec{n}=(3;-1;2)\\)", "B. \\(\\vec{n}=(-1;3;2)\\)", "C. \\(\\vec{n}=(3;2;-1)\\)", "D. \\(\\vec{n}=(2;3;-1)\\)"],
+            correctIndex: 2,
+            explanation: "Vectơ pháp tuyến của mặt phẳng \\((P): Ax+By+Cz+D=0\\) là \\(\\vec{n}=(A; B; C)\\). Dễ dàng thấy \\(\\vec{n}=(3; 2; -1)\\). Chọn C."
+        }
+    ];
+
+    // --- BIẾN TRẠNG THÁI ---
+    let currentQuestionIndex = 0;
+    let wheelInterval;
+    let questionInterval;
+    let currentStudent = "";
+    
+    // --- LOGIC VÒNG QUAY ---
+    function startWheel() {
+        document.getElementById('btn-spin').disabled = true;
+        document.getElementById('btn-start-q').classList.add('hidden');
+        let timeLeft = 15;
+        const timerDisplay = document.getElementById('wheel-timer');
+        const nameDisplay = document.getElementById('selected-student');
+        
+        // Hiệu ứng tên nhấp nháy liên tục
+        wheelInterval = setInterval(() => {
+            const randomName = students[Math.floor(Math.random() * students.length)];
+            nameDisplay.innerText = randomName;
+        }, 100);
+
+        // Đếm ngược 15 giây
+        const countdown = setInterval(() => {
+            timeLeft--;
+            timerDisplay.innerText = timeLeft;
+            if (timeLeft <= 0) {
+                clearInterval(wheelInterval);
+                clearInterval(countdown);
+                currentStudent = students[Math.floor(Math.random() * students.length)];
+                nameDisplay.innerText = "🎉 " + currentStudent + " 🎉";
+                document.getElementById('btn-start-q').classList.remove('hidden');
+                document.getElementById('current-student-name').innerText = currentStudent;
+            }
+        }, 1000);
+    }
+
+    // --- LOGIC CÂU HỎI ---
+    function showQuestionScreen() {
+        document.getElementById('screen-wheel').classList.add('hidden');
+        document.getElementById('screen-question').classList.remove('hidden');
+        loadQuestion();
+    }
+
+    function loadQuestion() {
+        if (currentQuestionIndex >= questions.length) {
+            alert("Đã hết câu hỏi ôn tập!");
+            return;
+        }
+
+        const q = questions[currentQuestionIndex];
+        document.getElementById('question-text').innerHTML = q.text;
+        document.getElementById('explanation-text').innerHTML = q.explanation;
+        document.getElementById('explanation').style.display = 'none';
+        document.getElementById('btn-to-gifts').classList.add('hidden');
+        
+        const optionsContainer = document.getElementById('options-container');
+        optionsContainer.innerHTML = '';
+        
+        q.options.forEach((opt, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerHTML = opt;
+            btn.onclick = () => checkAnswer(btn, index);
+            optionsContainer.appendChild(btn);
+        });
+
+        // Cập nhật lại công thức Toán
+        MathJax.typesetPromise();
+
+        // Bắt đầu đếm ngược 60s
+        let timeLeft = 60;
+        document.getElementById('question-timer').innerText = timeLeft;
+        clearInterval(questionInterval);
+        questionInterval = setInterval(() => {
+            timeLeft--;
+            document.getElementById('question-timer').innerText = timeLeft;
+            if (timeLeft <= 0) {
+                clearInterval(questionInterval);
+                alert("Hết giờ suy nghĩ!");
+                disableAllOptions();
+            }
+        }, 1000);
+    }
+
+    function checkAnswer(btn, selectedIndex) {
+        const q = questions[currentQuestionIndex];
+        if (selectedIndex === q.correctIndex) {
+            // Trả lời đúng
+            clearInterval(questionInterval);
+            btn.classList.add('correct');
+            disableAllOptions();
+            document.getElementById('explanation').style.display = 'block';
+            document.getElementById('btn-to-gifts').classList.remove('hidden');
+        } else {
+            // Trả lời sai
+            btn.classList.add('wrong');
+            btn.disabled = true; // Chỉ khóa nút sai, nhường cho bạn khác chọn
+        }
+    }
+
+    function disableAllOptions() {
+        const btns = document.querySelectorAll('.option-btn');
+        btns.forEach(b => b.disabled = true);
+    }
+
+    // --- LOGIC QUÀ TẶNG ---
+    function showGiftScreen() {
+        document.getElementById('screen-question').classList.add('hidden');
+        document.getElementById('screen-gifts').classList.remove('hidden');
+        document.getElementById('btn-next-question').classList.add('hidden');
+        
+        const container = document.getElementById('gifts-container');
+        container.innerHTML = '';
+        
+        // Trộn quà
+        let shuffledGifts = [...giftPool].sort(() => 0.5 - Math.random());
+        
+        for (let i = 0; i < 5; i++) {
+            const box = document.createElement('div');
+            box.className = 'gift-box';
+            box.innerText = '🎁';
+            box.onclick = () => openGift(box, shuffledGifts[i]);
+            container.appendChild(box);
+        }
+    }
+
+    function openGift(boxElement, giftText) {
+        // Mở hộp quà được chọn
+        boxElement.classList.add('opened');
+        boxElement.innerText = giftText;
+        
+        // Khóa các hộp khác
+        const boxes = document.querySelectorAll('.gift-box');
+        boxes.forEach(b => b.onclick = null);
+        
+        // Hiện nút đi tiếp
+        document.getElementById('btn-next-question').classList.remove('hidden');
+    }
+
+    function nextQuestion() {
+        currentQuestionIndex++;
+        // Reset về màn hình quay tên cho câu mới
+        document.getElementById('screen-gifts').classList.add('hidden');
+        document.getElementById('screen-wheel').classList.remove('hidden');
+        
+        // Reset wheel state
+        document.getElementById('btn-spin').disabled = false;
+        document.getElementById('btn-start-q').classList.add('hidden');
+        document.getElementById('selected-student').innerText = '...';
+        document.getElementById('wheel-timer').innerText = '15';
+    }
+</script>
+
+</body>
+</html>
